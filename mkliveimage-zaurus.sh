@@ -126,10 +126,6 @@ TOOL_MAKEFS=${TOOLDIR}/bin/nbmakefs
 TOOL_SED=${TOOLDIR}/bin/nbsed
 TOOL_SUNLABEL=${TOOLDIR}/bin/nbsunlabel
 
-# mformat binaries
-MFORMAT=/usr/pkg/bin/mformat
-MCOPY=/usr/pkg/bin/mcopy
-
 # host binaries
 CAT=cat
 CP=cp
@@ -148,6 +144,7 @@ if [ "${OBJDIR}"X = "X" ]; then
 	OBJDIR=.
 fi
 TARGETROOTDIR=${OBJDIR}/targetroot.${MACHINE}
+TARGETFATDIR=${OBJDIR}/targetfat.${MACHINE}
 DOWNLOADDIR=download.${RELEASE}.${MACHINE}
 WORKDIR=${OBJDIR}/work.${MACHINE}
 IMAGE=${WORKDIR}/liveimage-${MACHINE}-${REVISION}.img
@@ -159,6 +156,7 @@ FATMB=32			# to store bootloader and kernels
 IMAGEMB=948			# for "1GB" SD (mine has only 994,050,048 B)
 SWAPMB=64			# 64MB
 FATSECTORS=$((${FATMB} * 1024 * 1024 / 512))
+FATSIZE=$((${FATSECTORS} * 512))
 IMAGESECTORS=$((${IMAGEMB} * 1024 * 1024 / 512))
 SWAPSECTORS=$((${SWAPMB} * 1024 * 1024 / 512))
 
@@ -205,7 +203,6 @@ URL_KERN=http://${FTPHOST}/${RELEASEDIR}/${MACHINE}/binary/kernel
 URL_INST=http://${FTPHOST}/${RELEASEDIR}/${MACHINE}/installation
 #SETS="${KERN_SET} modules base etc comp games man misc tests text xbase xcomp xetc xfont xserver ${EXTRA_SETS}"
 SETS="${KERN_SET} base etc misc text xbase xetc xfont xserver ${EXTRA_SETS}"
-INSTFILES="zboot zbsdmod.o"
 INSTKERNEL="netbsd-INSTALL netbsd-INSTALL_C700"
 #SETS="${KERN_SET} base etc comp ${EXTRA_SETS}"
 ${MKDIR} -p ${DOWNLOADDIR}
@@ -215,14 +212,6 @@ for set in ${SETS}; do
 		${FTP} ${FTP_OPTIONS} \
 		    -o ${DOWNLOADDIR}/${set}.tgz ${URL_SETS}/${set}.tgz \
 		    || err ${FTP}-${set}.tgz
-	fi
-done
-for instfile in ${INSTFILES}; do
-	if [ ! -f ${DOWNLOADDIR}/${instfile} ]; then
-		echo Fetching ${instfile}...
-		${FTP} ${FTP_OPTIONS} \
-		    -o ${DOWNLOADDIR}/${instfile} ${URL_INST}/${instfile} \
-		    || err ${FTP}-${instfile}
 	fi
 done
 for instkernel in ${INSTKERNEL}; do
@@ -330,34 +319,29 @@ ${TOOL_INSTALLBOOT} -v -m ${MACHINE} ${WORKDIR}/rootfs \
 fi
 
 if [ ${FATSECTORS} != 0 ]; then
-	echo Creating FAT image file...
-	# XXX no makefs -t msdos yet
-	${DD} if=/dev/zero of=${WORKDIR}/fatfs seek=$((${FATSECTORS} - 1)) count=1
-	if [ -x ${MFORMAT} -a -x ${MCOPY} ]; then
-		echo Formatting FAT partition...
-		${MFORMAT} -i ${WORKDIR}/fatfs \
-		    -t ${FATCYLINDERS} -h ${HEADS} -s ${SECTORS} :: \
-		    || err ${MFORMAT}
-		echo Copying zaurus bootstrap files...
-		${MCOPY} ${WORKDIR}/fatfs \
-		    ${DOWNLOADDIR}/zbsdmod.o ::/zbsdmod.o \
-		    || err ${MCOPY}-zbsdmod.o
-		${MCOPY} -i ${WORKDIR}/fatfs \
-		    ${DOWNLOADDIR}/zboot ::/zboot \
-		    || err ${MCOPY}-zboot
-		${MCOPY} -i ${WORKDIR}/fatfs \
-		    targetroot.zaurus/netbsd ::/netbsd \
-		    || err ${MCOPY}-netbsd
-		${MCOPY} -i ${WORKDIR}/fatfs \
-		    targetroot.zaurus/netbsd.c700 ::/netbsd.c700 \
-		    || err ${MCOPY}-netbsd.c700
-		${MCOPY} -i ${WORKDIR}/fatfs \
-		    ${DOWNLOADDIR}/netbsd-INSTALL ::/netbsd-INSTALL \
-		    || err ${MCOPY}-netbsd-INSTALL
-		${MCOPY} -i ${WORKDIR}/fatfs \
-		    ${DOWNLOADDIR}/netbsd-INSTALL_C700 ::/netbsd-INSTALL_C700 \
-		    || err ${MCOPY}-netbsd-INSTALL_C700
-	fi
+# create target fat
+	echo Removing ${TARGETFATDIR}...
+	rm -rf ${TARGETFATDIR}
+	${MKDIR} -p ${TARGETFATDIR}
+	echo Copying ${MACHINE} bootstrap files to FAT partition...
+	${CP} ${TARGETROOTDIR}/usr/mdec/zbsdmod.o ${TARGETFATDIR} \
+	    || err ${CP}-zbsdmod.o
+	${CP} ${TARGETROOTDIR}/usr/mdec/zboot ${TARGETFATDIR} \
+	    || err ${CP}-zboot
+	${CP} ${TARGETROOTDIR}/netbsd ${TARGETFATDIR} \
+	    || err ${CP}-netbsd
+	${CP} ${TARGETROOTDIR}/netbsd.c700 ${TARGETFATDIR} \
+	    || err ${CP}-netbsd.c700
+	${CP} ${DOWNLOADDIR}/netbsd-INSTALL ${TARGETFATDIR} \
+	    || err ${CP}-netbsd-INSTALL
+	${CP} ${DOWNLOADDIR}/netbsd-INSTALL_C700 ${TARGETFATDIR} \
+	    || err ${CP}-netbsd-INSTALL_C700
+
+	echo Creating rootfs...
+	${TOOL_MAKEFS} -t msdos \
+	    -M ${FATSIZE} -m ${FATSIZE} \
+	    ${WORKDIR}/fatfs ${TARGETFATDIR} \
+	    || err ${TOOL_MAKEFS}-msdos
 fi
 
 if [ "${OMIT_SWAPIMG}x" != "yesx" ]; then
