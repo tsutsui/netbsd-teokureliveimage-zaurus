@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-# $Id$
+# $Id: mkliveimage-zaurus.sh,v 1.2 2012/02/10 14:24:53 tsutsui Exp tsutsui $
 #
 # Copyright (c) 2009, 2010, 2011, 2012 Izumi Tsutsui.  All rights reserved.
 #
@@ -24,8 +24,8 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-REVISION=20120118
-#HOSTNAME=wzero3
+REVISION=20120316
+#HOSTNAME=zaurus
 HOSTNAME=
 
 TIMEZONE=Japan
@@ -51,7 +51,7 @@ if [ "${MACHINE}" = "zaurus" ]; then
  MACHINE_ARCH=arm
  MACHINE_GNU_PLATFORM=arm--netbsdelf		# for fdisk(8)
  TARGET_ENDIAN=le
- KERN_SET="kern-GENERIC kern-C700"
+ KERN_SET=kern-GENERIC
  EXTRA_SETS= # nothing
  USE_MBR=yes
  BOOTDISK=ld0		# for SD
@@ -102,8 +102,9 @@ FTPHOST=ftp.jp.NetBSD.org
 #FTPHOST=ftp7.jp.NetBSD.org
 #FTPHOST=nyftp.NetBSD.org
 #RELEASE=5.1
-#RELEASEDIR=pub/NetBSD/NetBSD-${RELEASE}
-RELEASEDIR=pub/NetBSD-daily/HEAD/201112290510Z
+RELEASE=6.0_BETA
+RELEASEDIR=pub/NetBSD/NetBSD-${RELEASE}
+#RELEASEDIR=pub/NetBSD-daily/HEAD/201112290510Z
 
 #
 # misc build settings
@@ -178,7 +179,11 @@ DENSITY=8192
 # get binary sets
 #
 URL_SETS=ftp://${FTPHOST}/${RELEASEDIR}/${MACHINE}/binary/sets
+URL_KERN=ftp://${FTPHOST}/${RELEASEDIR}/${MACHINE}/binary/kernel
+URL_INST=ftp://${FTPHOST}/${RELEASEDIR}/${MACHINE}/installation
 SETS="${KERN_SET} base etc comp games man misc tests text xbase xcomp xetc xfont xserver ${EXTRA_SETS}"
+INSTFILES="zboot zbsdmod.o"
+INSTKERNEL="netbsd-INSTALL netbsd-INSTALL_C700"
 #SETS="${KERN_SET} base etc comp ${EXTRA_SETS}"
 ${MKDIR} -p ${DOWNLOADDIR}
 for set in ${SETS}; do
@@ -188,6 +193,28 @@ for set in ${SETS}; do
 		    -o ${DOWNLOADDIR}/${set}.tgz ${URL_SETS}/${set}.tgz
 	fi
 done
+for instfile in ${INSTFILES}; do
+	if [ ! -f ${DOWNLOADDIR}/${instfile} ]; then
+		echo Fetching ${instfile}...
+		${FTP} ${FTP_OPTIONS} \
+		    -o ${DOWNLOADDIR}/${instfile} ${URL_INST}/${instfile}
+	fi
+done
+for instkernel in ${INSTKERNEL}; do
+	if [ ! -f ${DOWNLOADDIR}/${instkernel} ]; then
+		echo Fetching ${instkernel}...
+		${FTP} ${FTP_OPTIONS} \
+		    -o ${DOWNLOADDIR}/${instkernel} \
+		    ${URL_INST}/kernel/${instkernel}
+	fi
+done
+KERN_C700=netbsd-C700.gz
+if [ ! -f ${DOWNLOADDIR}/${KERN_C700} ]; then
+	echo Fetching ${KERN_C700}...
+	${FTP} ${FTP_OPTIONS} \
+	    -o ${DOWNLOADDIR}/${KERN_C700} \
+	    ${URL_KERN}/${KERN_C700}
+fi
 
 #
 # create targetroot
@@ -238,6 +265,7 @@ ln -sf /usr/share/zoneinfo/${TIMEZONE} ${TARGETROOTDIR}/etc/localtime
 
 echo Copying liveimage specific files...
 #${CP} etc/${MACHINE}/ttys ${TARGETROOTDIR}/etc/ttys
+gzip -dc ${DOWNLOADDIR}/netbsd-C700.gz > ${TARGETROOTDIR}/netbsd.c700
 
 echo Preparing spec file for makefs...
 ${CAT} ${TARGETROOTDIR}/etc/mtree/* | \
@@ -253,7 +281,7 @@ ${CAT} >> ${WORKDIR}/spec <<EOF
 ./netbsd.c700			type=file mode=0755
 ./proc				type=dir  mode=0755
 ./tmp				type=dir  mode=1777
-./etc/X11/xorg.conf		type=link mode=0755 link=xorg.conf.sample
+./etc/X11/xorg.conf		type=link mode=0755 link=xorg.conf.C7x0
 EOF
 
 echo Creating rootfs...
@@ -278,15 +306,17 @@ if [ ${FATSECTORS} != 0 ]; then
 		    -t ${FATCYLINDERS} -h ${HEADS} -s ${SECTORS} ::
 		echo Copying zaurus bootstrap files...
 		/usr/pkg/bin/mcopy -i ${WORKDIR}/fatfs \
-		    files.zaurus/zbsdmod.o ::/zbsdmod.o
+		    ${DOWNLOADDIR}/zbsdmod.o ::/zbsdmod.o
 		/usr/pkg/bin/mcopy -i ${WORKDIR}/fatfs \
-		    files.zaurus/zboot ::/zboot
+		    ${DOWNLOADDIR}/zboot ::/zboot
 		/usr/pkg/bin/mcopy -i ${WORKDIR}/fatfs \
 		    targetroot.zaurus/netbsd ::/netbsd
 		/usr/pkg/bin/mcopy -i ${WORKDIR}/fatfs \
 		    targetroot.zaurus/netbsd.c700 ::/netbsd.c700
 		/usr/pkg/bin/mcopy -i ${WORKDIR}/fatfs \
-		    files.zaurus/netbsd-INSTALL ::/netbsd-INSTALL
+		    ${DOWNLOADDIR}/netbsd-INSTALL ::/netbsd-INSTALL
+		/usr/pkg/bin/mcopy -i ${WORKDIR}/fatfs \
+		    ${DOWNLOADDIR}/netbsd-INSTALL_C700 ::/netbsd-INSTALL_C700
 	fi
 fi
 
