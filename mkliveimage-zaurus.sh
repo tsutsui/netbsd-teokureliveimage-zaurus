@@ -183,9 +183,6 @@ CYLINDERS=$((${IMAGESECTORS} / ( ${HEADS} * ${SECTORS} ) ))
 FSCYLINDERS=$((${FSSECTORS} / ( ${HEADS} * ${SECTORS} ) ))
 SWAPCYLINDERS=$((${SWAPSECTORS} / ( ${HEADS} * ${SECTORS} ) ))
 
-# mformat parameters
-FATCYLINDERS=$((${FATSECTORS} / ( ${HEADS} * ${SECTORS} ) ))
-
 # fdisk(8) parameters
 MBRSECTORS=63
 MBRHEADS=255
@@ -361,7 +358,7 @@ if [ ${FATSECTORS} != 0 ]; then
 	${CP} ${DOWNLOADDIR}/netbsd-INSTALL_C700 ${TARGETFATDIR} \
 	    || err ${CP}-netbsd-INSTALL_C700
 
-	echo Creating rootfs...
+	echo Creating msdosfs...
 	${TOOL_MAKEFS} -t msdos \
 	    -M ${FATSIZE} -m ${FATSIZE} \
 	    ${WORKDIR}/fatfs ${TARGETFATDIR} \
