@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-# Copyright (c) 2013 Izumi Tsutsui.  All rights reserved.
+# Copyright (c) 2013, 2019 Izumi Tsutsui.  All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -24,6 +24,12 @@
 
 BOOTDISK=@@BOOTDISK@@		# liveimage for SD card
 
+# XXX: RAW_PART is 3 (partition d) on hpcarm and zaurus,
+# XXX: but base binaries including disklabel(8) and fdisk(8) are built
+# XXX: on evbarm where RAW_PART is 2 (partition c)?
+RAWPART=d
+BOOTDISKRAWDEV=/dev/r${BOOTDISK}${RAWPART}
+
 echo Start expanding fs size upto the actual disk size...
 
 # make sure we are on ${BOOTDISK} on root
@@ -45,7 +51,7 @@ if ! (mount | grep -q '^tmpfs on /tmp') ; then
 fi
 
 # get current disklabel
-disklabel -r ${BOOTDISK} > /tmp/disklabel.${BOOTDISK}
+disklabel -r ${BOOTDISKRAWDEV} > /tmp/disklabel.${BOOTDISK}
 
 # check disk name in disklabel
 DISKNAME=`sed -n -e '/^disk: /s/.*: //p' /tmp/disklabel.${BOOTDISK}`
@@ -57,7 +63,7 @@ fi
 echo ${DISKNAME} found in ${BOOTDISK} disklabel.
 
 # get MBR label
-fdisk -S ${BOOTDISK} > /tmp/mbrlabel.${BOOTDISK}
+fdisk -S ${BOOTDISKRAWDEV} > /tmp/mbrlabel.${BOOTDISK}
 . /tmp/mbrlabel.${BOOTDISK}
 
 # check MBR part id
@@ -67,6 +73,10 @@ if [ ${PART0ID} != "@@MBRFAT@@" ]; then
 fi
 if [ ${PART1ID} != "@@MBRNETBSD@@" ]; then
 	echo Error: unexpected MBR part 1 partition ID: ${PART1ID}
+	exit 1
+fi
+if [ ${PART2ID} != "@@MBRLNXSWAP@@" ]; then
+	echo Error: unexpected MBR part 2 partition ID: ${PART2ID}
 	exit 1
 fi
 
@@ -125,10 +135,12 @@ fi
 # calculate new disk parameters
 SWAPSECTORS=${ORIGSWAPSECTORS}
 
+LABELSECTORS=${PART0START}
+FATSECTORS=${PART0SIZE}
 FSOFFSET=${PART1START}
-BSDPARTSECTORS=$((${IMAGESECTORS} - ${FSOFFSET}))
-FSSECTORS=$((${IMAGESECTORS} - ${SWAPSECTORS} - ${FSOFFSET}))
-SWAPOFFSET=$((${FSOFFSET} + ${FSSECTORS}))
+BSDPARTSECTORS=$((${IMAGESECTORS} - ${LABELSECTORS} - ${FATSECTORS} - ${SWAPSECTORS}))
+FSSECTORS=${BSDPARTSECTORS}
+SWAPOFFSET=$((${LABELSECTORS} + ${FATSECTORS} + ${FSSECTORS}))
 HEADS=@@HEADS@@
 SECTORS=@@SECTORS@@
 CYLINDERS=$((${IMAGESECTORS} / (${HEADS} * ${SECTORS} ) ))
@@ -146,21 +158,24 @@ sed -e "s/^cylinders: [0-9]*$/cylinders: ${CYLINDERS}/" \
 
 # check original fs
 echo Checking file system...
-fsck_ffs -p /dev/r${BOOTDISK}a
+fsck_ffs -Pp /dev/r${BOOTDISK}a
 
 # update MBR label
 echo Updating NetBSD partition size in MBR label...
 fdisk -f -u -b ${MBRCYLINDERS}/${BHEAD}/${BSEC} \
+    -2 -s ${PART2ID}/${SWAPOFFSET}/${SWAPSECTORS} \
+    ${BOOTDISKRAWDEV}
+fdisk -f -u \
     -1 -s ${PART1ID}/${FSOFFSET}/${BSDPARTSECTORS} \
-    ${BOOTDISK}
+    ${BOOTDISKRAWDEV}
 
 # write updated disklabel
 echo Updating partition size in disklabel...
-disklabel -R ${BOOTDISK} /tmp/disklabel.${BOOTDISK}.new
+disklabel -R ${BOOTDISKRAWDEV} /tmp/disklabel.${BOOTDISK}.new
 
 # update fs size
 echo Perform resize_ffs...
-resize_ffs -y /dev/r${BOOTDISK}a
+resize_ffs -py /dev/r${BOOTDISK}a
 echo Done!
 echo
 echo Hit Enter to reboot...

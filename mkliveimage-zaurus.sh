@@ -25,7 +25,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-REVISION=20191021
+REVISION=20191022
 
 DISKNAME=TeokureLiveImage
 IMAGEHOSTNAME=zaurus
@@ -50,6 +50,9 @@ err()
 #	fi
 #	MACHINE=$1
 #fi
+
+HAVE_EXPANDFS_SCRIPT=yes	# put a script to expand image fssize
+EXPANDFS_SH=expand-image-fssize.sh
 
 #
 # target dependent info
@@ -168,8 +171,9 @@ if [ "${USE_MBR}" = "yes" ]; then
 fi
 
 FATOFFSET=$((${LABELSECTORS}))
-BSDPARTSECTORS=$((${IMAGESECTORS} - ${FATSECTORS} - ${LABELSECTORS}))
-FSSECTORS=$((${BSDPARTSECTORS} - ${SWAPSECTORS}))
+# swap is allocated out of BSD partition as fdisk LNXSWAP
+BSDPARTSECTORS=$((${IMAGESECTORS} - ${LABELSECTORS} - ${FATSECTORS} - ${SWAPSECTORS}))
+FSSECTORS=${BSDPARTSECTORS}	
 FSOFFSET=$((${LABELSECTORS} + ${FATSECTORS}))
 SWAPOFFSET=$((${LABELSECTORS} + ${FATSECTORS} + ${FSSECTORS}))
 FSSIZE=$((${FSSECTORS} * 512))
@@ -303,6 +307,26 @@ ${CAT} >> ${WORKDIR}/spec <<EOF
 ./etc/X11/xorg.conf		type=link mode=0755 link=xorg.conf.C7x0
 EOF
 
+if [ ${HAVE_EXPANDFS_SCRIPT}x = "yesx" ]; then
+	echo Preparing ${EXPANDFS_SH} script...
+	${TOOL_SED} 							\
+		-e "s/@@BOOTDISK@@/${BOOTDISK}/"			\
+		-e "s/@@DISKNAME@@/${DISKNAME}/"			\
+		-e "s/@@IMAGEMB@@/${IMAGEMB}/"				\
+		-e "s/@@MBRFAT@@/${MBRFAT}/"				\
+		-e "s/@@FATMB@@/${FATMB}/"				\
+		-e "s/@@FATOFFSET@@/${FATOFFSET}/"			\
+		-e "s/@@MBRNETBSD@@/${MBRNETBSD}/"			\
+		-e "s/@@BSDPARTSECTORS@@/${BSDPARTSECTORS}/"		\
+		-e "s/@@MBRLNXSWAP@@/${MBRLNXSWAP}/"			\
+		-e "s/@@SWAPMB@@/${SWAPMB}/"				\
+		-e "s/@@HEADS@@/${HEADS}/"				\
+		-e "s/@@SECTORS@@/${SECTORS}/"				\
+		< ./${EXPANDFS_SH}.in > ${TARGETROOTDIR}/${EXPANDFS_SH} \
+		|| err ${TOOL_SED}-expandfs
+	echo ./${EXPANDFS_SH}   type=file mode=755 >> ${WORKDIR}/spec
+fi
+
 echo Creating rootfs...
 ${TOOL_MAKEFS} -M ${FSSIZE} -m ${FSSIZE} \
 	-B ${TARGET_ENDIAN} \
@@ -365,7 +389,7 @@ if [ "${MACHINE}" = "i386" -o "${MACHINE}" = "amd64" ]; then
 else
 	${TOOL_FDISK} -f -u -i \
 	    -b ${MBRCYLINDERS}/${MBRHEADS}/${MBRSECTORS} \
-	    -1 -a -s ${MBRNETBSD}/${FSOFFSET}/${FSSECTORS} \
+	    -1 -a -s ${MBRNETBSD}/${FSOFFSET}/${BSDPARTSECTORS} \
 	    -F ${IMAGE}.mbr \
 	    || err ${TOOL_FDISK}-1
 fi
@@ -437,7 +461,7 @@ drivedata: 0
 #        size    offset     fstype [fsize bsize cpg/sgs]
 a:    ${FSSECTORS} ${FSOFFSET} 4.2BSD ${FRAGSIZE} ${BLOCKSIZE} 128
 b:    ${SWAPSECTORS} ${SWAPOFFSET} swap
-c:    ${FSSECTORS} ${FSOFFSET} unused 0 0
+c:    ${BSDPARTSECTORS} ${FSOFFSET} unused 0 0
 d:    ${IMAGESECTORS} 0 unused 0 0
 e:    ${FATSECTORS} ${FATOFFSET} MSDOS
 EOF
