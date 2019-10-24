@@ -268,7 +268,8 @@ ${CAT} > ${WORKDIR}/fstab <<EOF
 ptyfs		/dev/pts	ptyfs	rw		0 0
 kernfs		/kern		kernfs	rw		0 0
 procfs		/proc		procfs	rw		0 0
-tmpfs		/tmp		tmpfs	rw,-sram%25	0 0
+#tmpfs		/tmp		tmpfs	rw,-m1777,-s=16M	0 0
+tmpfs		/var/shm	tmpfs	rw,-m1777,-sram%25	0 0
 EOF
 ${CP} ${WORKDIR}/fstab  ${TARGETROOTDIR}/etc
 
