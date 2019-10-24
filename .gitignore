@@ -1,5 +1,7 @@
 download.*
-obj*
+images
+obj
+src
 targetfat.*
 targetroot.*
 work.*

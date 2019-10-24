@@ -77,16 +77,17 @@ if [ -z ${MACHINE_ARCH} ]; then
 	exit 1
 fi
 
+CURDIR=`pwd`
+# assume proper symlinks are prepared in ${CURDIR}
+NETBSDSRCDIR=${CURDIR}/src
+OBJDIR=${CURDIR}
+if [ -e ${CURDIR}/obj ]; then
+	OBJDIR=${CURDIR}/obj
+fi
+
 #
 # tooldir settings
 #
-#NETBSDSRCDIR=/usr/src
-#TOOLDIR=/usr/tools/${MACHINE_ARCH}
-
-if [ -z ${NETBSDSRCDIR} ]; then
-	NETBSDSRCDIR=/usr/src
-fi
-
 if [ -z ${TOOLDIR} ]; then
 	_HOST_OSNAME=`uname -s`
 	_HOST_OSREL=`uname -r`
@@ -130,6 +131,7 @@ TOOL_SED=${TOOLDIR}/bin/nbsed
 TOOL_SUNLABEL=${TOOLDIR}/bin/nbsunlabel
 
 # host binaries
+AWK=/usr/pkg/bin/gawk	# GNU awk is necessary for "%'d" format
 CAT=cat
 CP=cp
 DD=dd
@@ -137,20 +139,20 @@ FTP=ftp
 #FTP=tnftp
 FTP_OPTIONS=-V
 GZIP=gzip
+MD5=/usr/bin/md5
+#MD5=/usr/bin/md5sum
 MKDIR=mkdir
 RM=rm
 SH=sh
 TAR=tar
+WC=wc
 
-# working directories
-if [ "${OBJDIR}"X = "X" ]; then
-	OBJDIR=.
-fi
 TARGETROOTDIR=${OBJDIR}/targetroot.${MACHINE}
 TARGETFATDIR=${OBJDIR}/targetfat.${MACHINE}
 DOWNLOADDIR=download.${RELEASE}.${MACHINE}
 WORKDIR=${OBJDIR}/work.${MACHINE}
-IMAGE=${WORKDIR}/liveimage-${MACHINE}-${REVISION}.img
+IMAGE=liveimage-${MACHINE}-${REVISION}.img
+IMAGEDIR=${CURDIR}/images/${REVISION}-${MACHINE}
 
 #
 # target image size settings
@@ -376,53 +378,53 @@ fi
 
 if [ ${LABELSECTORS} != 0 ]; then
 	echo Creating MBR labels...
-	${DD} if=/dev/zero of=${IMAGE}.mbr count=1 \
+	${DD} if=/dev/zero of=${WORKDIR}/${IMAGE}.mbr count=1 \
 	    seek=$((${IMAGESECTORS} - 1)) \
 	    || err ${DD}-mbr
 if [ "${MACHINE}" = "i386" -o "${MACHINE}" = "amd64" ]; then
 	${TOOL_FDISK} -f -u -i \
 	    -b ${MBRCYLINDERS}/${MBRHEADS}/${MBRSECTORS} \
 	    -c ${TARGETROOTDIR}/usr/mdec/mbr \
-	    -F ${IMAGE}.mbr \
+	    -F ${WORKDIR}/${IMAGE}.mbr \
 	    || err ${TOOL_FDISK}-1
 else
 	${TOOL_FDISK} -f -u -i \
 	    -b ${MBRCYLINDERS}/${MBRHEADS}/${MBRSECTORS} \
 	    -1 -a -s ${MBRNETBSD}/${FSOFFSET}/${BSDPARTSECTORS} \
-	    -F ${IMAGE}.mbr \
+	    -F ${WORKDIR}/${IMAGE}.mbr \
 	    || err ${TOOL_FDISK}-1
 fi
 	# create FAT partition
 	${TOOL_FDISK} -f -u \
 	    -0 -s ${MBRFAT}/${FATOFFSET}/${FATSECTORS} \
-	    -F ${IMAGE}.mbr \
+	    -F ${WORKDIR}/${IMAGE}.mbr \
 	    || err ${TOOL_FDISK}-0
 	# create swap partition as Linux swap
 	${TOOL_FDISK} -f -u \
 	    -2 -s ${MBRLNXSWAP}/${SWAPOFFSET}/${SWAPSECTORS} \
-	    -F ${IMAGE}.mbr \
+	    -F ${WORKDIR}/${IMAGE}.mbr \
 	    || err ${TOOL_FDISK}-2
-	${DD} if=${IMAGE}.mbr of=${WORKDIR}/mbrsectors count=${LABELSECTORS} \
+	${DD} if=${WORKDIR}/${IMAGE}.mbr of=${WORKDIR}/mbrsectors count=${LABELSECTORS} \
 	    || err ${DD}-mbrsectors
-	${RM} -f ${IMAGE}.mbr
+	${RM} -f ${WORKDIR}/${IMAGE}.mbr
 	echo Copying target disk image...
-	${CAT} ${WORKDIR}/mbrsectors > ${IMAGE} \
+	${CAT} ${WORKDIR}/mbrsectors > ${WORKDIR}/${IMAGE} \
 	    || err ${CAT}-mbrsectors
 	if [ ${FATSECTORS} != 0 ]; then
-		${CAT} ${WORKDIR}/fatfs >> ${IMAGE} \
+		${CAT} ${WORKDIR}/fatfs >> ${WORKDIR}/${IMAGE} \
 		    || err ${CAT}-fatfs
 	fi
-	${CAT} ${WORKDIR}/rootfs >> ${IMAGE}
+	${CAT} ${WORKDIR}/rootfs >> ${WORKDIR}/${IMAGE}
 	if [ "${OMIT_SWAPIMG}x" != "yesx" ]; then
-		${CAT} ${WORKDIR}/swap >> ${IMAGE} \
+		${CAT} ${WORKDIR}/swap >> ${WORKDIR}/${IMAGE} \
 		    || err ${CAT}-swap
 	fi
 else
 	echo Copying target disk image...
-	${CP} ${WORKDIR}/rootfs ${IMAGE} \
+	${CP} ${WORKDIR}/rootfs ${WORKDIR}/${IMAGE} \
 	    || err ${CP}
 	if [ "${OMIT_SWAPIMG}x" != "yesx" ]; then
-		${CAT} ${WORKDIR}/swap >> ${IMAGE} \
+		${CAT} ${WORKDIR}/swap >> ${WORKDIR}/${IMAGE} \
 		    || err ${CAT}
 	fi
 fi
@@ -432,7 +434,7 @@ if [ ! -z ${USE_SUNLABEL} ]; then
 	printf 'V ncyl %d\nV nhead %d\nV nsect %d\na %d %d/0/0\nb %d %d/0/0\nW\n' \
 	    ${CYLINDERS} ${HEADS} ${SECTORS} \
 	    ${FSOFFSET} ${FSCYLINDERS} ${FSCYLINDERS} ${SWAPCYLINDERS} | \
-	    ${TOOL_SUNLABEL} -nq ${IMAGE} \
+	    ${TOOL_SUNLABEL} -nq ${WORKDIR}/${IMAGE} \
 	    || err ${TOOL_SUNLABEL}
 fi
 
@@ -465,11 +467,36 @@ d:    ${IMAGESECTORS} 0 unused 0 0
 e:    ${FATSECTORS} ${FATOFFSET} MSDOS
 EOF
 
-${TOOL_DISKLABEL} -R -F -M ${MACHINE} ${IMAGE} ${WORKDIR}/labelproto \
+${TOOL_DISKLABEL} -R -F -M ${MACHINE} ${WORKDIR}/${IMAGE} ${WORKDIR}/labelproto \
     || err ${TOOL_DISKLABEL}
 
 # XXX some ${MACHINE} needs disklabel for installboot
 #${TOOL_INSTALLBOOT} -vm ${MACHINE} ${MACHINE}.img \
 #    ${TARGETROOTDIR}/usr/mdec/${PRIMARY_BOOT}
+
+# create release files
+echo Compressing ${IMAGE}...
+${MKDIR} -p ${IMAGEDIR}
+${DD} if=${WORKDIR}/${IMAGE} count=$((${IMAGEMB} - ${SWAPMB})) bs=1m \
+    | ${GZIP} -9c > ${IMAGEDIR}/${IMAGE}.gz
+
+TARGET=distinfo
+
+rm -f ${IMAGEDIR}/${TARGET}
+touch ${IMAGEDIR}/${TARGET}
+
+# Put MD5 and sizes of compressed images
+echo Calculating distinfo...
+echo ${IMAGE}
+ (cd ${IMAGEDIR} && ${MD5} ${IMAGE}.gz >> ${TARGET})
+ (cd ${IMAGEDIR} && ${WC} -c ${IMAGE}.gz | \
+  LANG=ja_JP.UTF-8 ${AWK} '{printf "Size (%s) = %\047d bytes\n","'${IMAGE}.gz'",$1}' >> ${TARGET})
+
+# put sizes of uncompressed images
+
+echo >> ${IMAGEDIR}/${TARGET}
+#  for ${IMG_AMD64_USB}
+ (${GZIP} -cd ${IMAGEDIR}/${IMAGE}.gz | ${WC} -c | \
+  LANG=ja_JP.UTF-8 ${AWK} '{printf "Size (%s) = %\047d bytes\n","'${IMAGE}'",$1 }' >> ${IMAGEDIR}/${TARGET})
 
 echo Creating image \"${IMAGE}\" complete.
