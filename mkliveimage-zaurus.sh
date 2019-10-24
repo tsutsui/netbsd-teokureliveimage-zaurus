@@ -25,7 +25,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-REVISION=20191022
+REVISION=20191024
 
 DISKNAME=TeokureLiveImage
 IMAGEHOSTNAME=zaurus
@@ -200,7 +200,6 @@ DENSITY=8192
 # get binary sets
 #
 URL_SETS=http://${FTPHOST}/${RELEASEDIR}/${MACHINE}/binary/sets
-URL_KERN=http://${FTPHOST}/${RELEASEDIR}/${MACHINE}/binary/kernel
 URL_INST=http://${FTPHOST}/${RELEASEDIR}/${MACHINE}/installation
 #SETS="${KERN_SET} modules base etc comp games man misc tests text xbase xcomp xetc xfont xserver ${EXTRA_SETS}"
 SETS="${KERN_SET} base etc misc text xbase xetc xfont xserver ${EXTRA_SETS}"
@@ -224,12 +223,12 @@ for instkernel in ${INSTKERNEL}; do
 		    || err ${FTP}-${instkernel}
 	fi
 done
-KERN_C700=netbsd-C700.gz
+KERN_C700=kern-C700.tgz
 if [ ! -f ${DOWNLOADDIR}/${KERN_C700} ]; then
 	echo Fetching ${KERN_C700}...
 	${FTP} ${FTP_OPTIONS} \
 	    -o ${DOWNLOADDIR}/${KERN_C700} \
-	    ${URL_KERN}/${KERN_C700} \
+	    ${URL_SETS}/${KERN_C700} \
 	    || err ${FTP}-${KERN_C700}
 fi
 
@@ -285,7 +284,9 @@ ln -sf /usr/share/zoneinfo/${TIMEZONE} ${TARGETROOTDIR}/etc/localtime
 
 echo Copying liveimage specific files...
 #${CP} etc/${MACHINE}/ttys ${TARGETROOTDIR}/etc/ttys
-${GZIP} -dc ${DOWNLOADDIR}/netbsd-C700.gz > ${TARGETROOTDIR}/netbsd.c700
+${TAR} -C ${WORKDIR} -zxf ${DOWNLOADDIR}/${KERN_C700} \
+    || err ${TAR}-${KERN_C700}
+${CP} ${WORKDIR}/netbsd ${TARGETROOTDIR}/netbsd.c700
 
 echo Preparing spec file for makefs...
 ${CAT} ${TARGETROOTDIR}/etc/mtree/* | \
