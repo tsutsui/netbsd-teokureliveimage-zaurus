@@ -25,7 +25,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-REVISION=20191024
+REVISION=20191130
 
 DISKNAME=TeokureLiveImage
 IMAGEHOSTNAME=zaurus
@@ -114,7 +114,7 @@ fi
 #FTPHOST=ftp7.jp.NetBSD.org
 FTPHOST=cdn.NetBSD.org
 #FTPHOST=nyftp.NetBSD.org
-RELEASE=8.1
+RELEASE=9.0_RC1
 RELEASEDIR=pub/NetBSD/NetBSD-${RELEASE}
 #RELEASEDIR=pub/NetBSD-daily/HEAD/201910202250Z
 
@@ -203,8 +203,8 @@ DENSITY=8192
 #
 URL_SETS=http://${FTPHOST}/${RELEASEDIR}/${MACHINE}/binary/sets
 URL_INST=http://${FTPHOST}/${RELEASEDIR}/${MACHINE}/installation
-#SETS="${KERN_SET} modules base etc comp games man misc tests text xbase xcomp xetc xfont xserver ${EXTRA_SETS}"
-SETS="${KERN_SET} base etc misc text xbase xetc xfont xserver ${EXTRA_SETS}"
+#SETS="${KERN_SET} modules base rescue etc comp games man misc tests text xbase xcomp xetc xfont xserver ${EXTRA_SETS}"
+SETS="${KERN_SET} base rescue etc misc text xbase xetc xfont xserver ${EXTRA_SETS}"
 INSTKERNEL="netbsd-INSTALL netbsd-INSTALL_C700"
 #SETS="${KERN_SET} base etc comp ${EXTRA_SETS}"
 ${MKDIR} -p ${DOWNLOADDIR}
