@@ -264,9 +264,9 @@ ${MKDIR} -p ${WORKDIR}
 
 echo Preparing /etc/fstab...
 ${CAT} > ${WORKDIR}/fstab <<EOF
-/dev/${BOOTDISK}a	/		ffs	rw,log		1 1
-/dev/${BOOTDISK}b	none		none	sw		0 0
-/dev/${BOOTDISK}e	/dos	msdos	rw		0 0
+ROOT.a		/		ffs	rw,log		1 1
+ROOT.b		none		none	sw		0 0
+ROOT.e		/dos		msdos	rw		0 0
 ptyfs		/dev/pts	ptyfs	rw		0 0
 kernfs		/kern		kernfs	rw		0 0
 procfs		/proc		procfs	rw		0 0
